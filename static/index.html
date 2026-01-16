@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSDN评论区抽奖系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="shortcut icon" href="/static/images/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <div class="container">
+        <h1>CSDN评论区抽奖系统</h1>
+        
+        <form id="lottery-form">
+            <div class="form-group">
+                <label for="article-url">CSDN文章链接</label>
+                <input type="text" id="article-url" placeholder="请输入CSDN文章链接，例如：https://blog.csdn.net/xxx/article/details/123456789" required>
+            </div>
+            
+            <div class="form-group" style="display: flex; gap: 40px; align-items: center; justify-content: space-between; padding: 15px; background-color: #f9f9f9; border-radius: 4px;">
+                <div class="checkbox-group" style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="include-fold" name="include-fold" checked style="transform: scale(1.2);">
+                    <label for="include-fold" style="margin: 0; font-size: 16px;">是否包含折叠评论</label>
+                </div>
+                
+                <div class="checkbox-group" style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="include-replies" name="include-replies" style="transform: scale(1.2);">
+                    <label for="include-replies" style="margin: 0; font-size: 16px;">是否包含回复评论</label>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <label for="winner-count" style="margin: 0; font-size: 16px; font-weight: normal;">中奖人数</label>
+                    <input type="number" id="winner-count" min="1" value="1" required style="width: 100px; padding: 8px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 16px;">
+                </div>
+            </div>
+            
+            <div class="btn-group" style="display: flex; justify-content: center; margin-top: 30px;">
+                <button type="button" id="fetch-btn">获取评论</button>
+                <button type="button" id="lottery-btn">开始抽奖</button>
+            </div>
+        </form>
+        
+        <div class="result">
+            <h2>结果</h2>
+            <div id="status-message"></div>
+            
+            <div id="comment-stats" style="display: none;">
+                <p>总评论数: <span id="total-comments">-</span></p>
+                <p id="unique-comments-container" style="display: none;">去重后评论数: <span id="unique-comments">-</span></p>
+            </div>
+            
+            <div id="winner-section" style="display: none;">
+                <h3>中奖名单</h3>
+                <div class="winner-list" id="winner-list"></div>
+            </div>
+            
+            <div id="comment-section" style="display: none;">
+                <h3>评论列表</h3>
+                <div class="comment-list" id="comment-list"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // DOM元素
+        const articleUrlInput = document.getElementById('article-url');
+        const includeFoldCheckbox = document.getElementById('include-fold');
+        const includeRepliesCheckbox = document.getElementById('include-replies');
+        const winnerCountInput = document.getElementById('winner-count');
+        const fetchBtn = document.getElementById('fetch-btn');
+        const lotteryBtn = document.getElementById('lottery-btn');
+        const statusMessage = document.getElementById('status-message');
+        const commentStats = document.getElementById('comment-stats');
+        const totalCommentsSpan = document.getElementById('total-comments');
+        const uniqueCommentsSpan = document.getElementById('unique-comments');
+        const winnerSection = document.getElementById('winner-section');
+        const winnerList = document.getElementById('winner-list');
+        const commentSection = document.getElementById('comment-section');
+        const commentList = document.getElementById('comment-list');
+        
+        // 设置默认值
+        includeFoldCheckbox.checked = true; // 默认选中折叠评论
+        
+        // 显示状态消息
+        function showMessage(message, isError = false) {
+            statusMessage.textContent = message;
+            statusMessage.className = isError ? 'status-message status-error' : 'status-message status-success';
+            statusMessage.style.display = 'block';
+        }
+        
+        // 隐藏状态消息
+        function hideMessage() {
+            statusMessage.style.display = 'none';
+        }
+        
+        // 显示加载状态
+        function showLoading(button) {
+            const originalText = button.textContent;
+            button.innerHTML = '<div class="loading"></div> 处理中...';
+            button.disabled = true;
+            return originalText;
+        }
+        
+        // 隐藏加载状态
+        function hideLoading(button, originalText) {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+        
+        // 获取评论
+        fetchBtn.addEventListener('click', async function() {
+            const url = articleUrlInput.value.trim();
+            if (!url) {
+                showMessage('请输入文章链接', true);
+                return;
+            }
+            
+            hideMessage();
+            const originalText = showLoading(fetchBtn);
+            
+            try {
+                const response = await fetch('/api/fetch_comments', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        url: url,
+                        include_fold: includeFoldCheckbox.checked,
+                        include_replies: includeRepliesCheckbox.checked
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    totalCommentsSpan.textContent = data.total_comments;
+                    uniqueCommentsSpan.textContent = data.unique_comments;
+                    commentStats.style.display = 'none'; // 隐藏评论统计
+                    
+                    // 显示评论列表
+                    commentList.innerHTML = '';
+                    data.comments.forEach((comment, index) => {
+                        const commentItem = document.createElement('div');
+                        commentItem.className = 'comment-item';
+                        commentItem.innerHTML = `
+                            <div class="comment-author">${index + 1}. ${comment.nickName}</div>
+                            <div class="comment-content">${comment.content}</div>
+                        `;
+                        commentList.appendChild(commentItem);
+                    });
+                    commentSection.style.display = 'block';
+                    
+                    // 隐藏中奖名单
+                    winnerSection.style.display = 'none';
+                    
+                    showMessage(`成功获取 ${data.total_comments} 条评论`);
+                } else {
+                    showMessage(data.message, true);
+                }
+            } catch (error) {
+                showMessage('获取评论失败，请稍后重试', true);
+                console.error(error);
+            } finally {
+                hideLoading(fetchBtn, originalText);
+            }
+        });
+        
+        // 开始抽奖
+        lotteryBtn.addEventListener('click', async function() {
+            const url = articleUrlInput.value.trim();
+            if (!url) {
+                showMessage('请输入文章链接', true);
+                return;
+            }
+            
+            const winnerCount = parseInt(winnerCountInput.value);
+            if (winnerCount < 1) {
+                showMessage('中奖人数必须大于0', true);
+                return;
+            }
+            
+            hideMessage();
+            const originalText = showLoading(lotteryBtn);
+            
+            try {
+                const response = await fetch('/api/run_lottery', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        url: url,
+                        include_fold: includeFoldCheckbox.checked,
+                        include_replies: includeRepliesCheckbox.checked,
+                        winner_count: winnerCount
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // 更新评论统计
+                    totalCommentsSpan.textContent = data.total_comments;
+                    uniqueCommentsSpan.textContent = data.unique_comments;
+                    commentStats.style.display = 'block';
+                    document.getElementById('unique-comments-container').style.display = 'block'; // 显示去重后的评论数
+                    
+                    // 显示中奖名单（只显示用户名称，可点击跳转到主页）
+                    winnerList.innerHTML = '';
+                    data.winners.forEach((winner, index) => {
+                        const winnerItem = document.createElement('div');
+                        winnerItem.className = 'winner-item';
+                        console.log('Winner data:', winner); // 调试信息
+                        // 构建CSDN用户主页链接
+                        let csdnLink = '';
+                        if (winner.username) {
+                            csdnLink = `https://blog.csdn.net/${winner.username}`;
+                        } else {
+                            // 如果没有用户名，跳转到CSDN搜索页面
+                            csdnLink = `https://so.csdn.net/so/search?q=${encodeURIComponent(winner.nickName)}&t=blog`;
+                        }
+                        winnerItem.innerHTML = `
+                            <div class="winner-author">${index + 1}. <a href="${csdnLink}" target="_blank" style="color: #1890ff; text-decoration: none;">${winner.nickName}</a></div>
+                        `;
+                        winnerList.appendChild(winnerItem);
+                    });
+                    winnerSection.style.display = 'block';
+                    
+                    // 隐藏评论内容
+                    commentSection.style.display = 'none';
+                    
+                    showMessage(`抽奖完成，共产生 ${data.winners.length} 名获奖者`);
+                } else {
+                    showMessage(data.message, true);
+                }
+            } catch (error) {
+                showMessage('抽奖失败，请稍后重试', true);
+                console.error(error);
+            } finally {
+                hideLoading(lotteryBtn, originalText);
+            }
+        });
+    </script>
+    
+    <footer style="margin-top: 50px; padding: 20px; background-color: #f5f5f5; text-align: center; font-size: 14px; color: #666; border-top: 1px solid #e8e8e8;">
+        <div style="max-width: 800px; margin: 0 auto;">
+            <p>本站内容搜索结果来源于 <a href="https://blog.csdn.net/" target="_blank">CSDN</a>，如有问题或建议，
+            请联系邮箱：<img src="/static/images/email.png" height="15" width="15" style="display: inline; vertical-align: middle;" /> <a href="mailto:2162059863@qq.com" target="_blank" style="color: #666;">2162059863@qq.com</a> <br/></p>
+            <p><a href="https://www.bjjubao.org.cn/index.html" target="_blank" style="color: #666;">北京互联网违法和不良信息举报中心</a>&emsp;
+            <a href="https://cyberpolice.mps.gov.cn/" target="_blank" style="color: #666;">网络110报警服务</a>&emsp;
+            <a href="https://www.12377.cn/" target="_blank"  style="color: #666;">中国互联网举报中心</a><br></p>
+            <p>版权所有 &copy; 2025 - <span id="current-year"></span> By <a href="https://liucy.blog.csdn.net/" target="_blank" style="color: #666;">A-刘晨阳</a> | 
+            <img src="/static/images/202312142253822.png" height="15" width="15" style="display: inline; vertical-align: middle;" /> 
+            <a href="http://beian.miit.gov.cn/" target="_blank">京ICP备2023037493号</a> | 
+            <img src="/static/images/202312142253823.ico" height="15" width="15" style="display: inline; vertical-align: middle;" /> 
+            <a href="https://icp.gov.moe/?keyword=20250703" target="_blank">萌ICP备20250703号</a>
+            <br/></p>
+            <p>更多关注：<img src="/static/images/WeChat.png" height="15" width="15" style="display: inline; vertical-align: middle;" /> 小刘Linux | 
+            <img src="/static/images/github.png" height="15" width="15" style="display: inline; vertical-align: middle;" /> <a href="https://github.com/liuchenyang0703" target="_blank">liuchenyang0703</a> | 
+            <img src="/static/images/csdn.png" height="15" width="15" style="display: inline; vertical-align: middle;" /> <a href="https://liucy.blog.csdn.net/" target="_blank">A-刘晨阳</a> | 
+            <a href="https://liuchenyang.top" target="_blank">个人网站</a> | <a href="https://liuchenyang0703.github.io/nav/" target="_blank">网址导航</a></p>
+            <p>更多CSDN相关： <a href="http://liuchenyang.top:8000/" target="_blank">CSDN文章质量分批量查询</a> | <a href="http://liuchenyang.top:8100/" target="_blank">CSDN评论区抽奖系统</a></p>
+        </div>
+    </footer>
+    
+    <script>
+        // 设置当前年份
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+    </script>
+</body>
+</html>

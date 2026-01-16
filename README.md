@@ -22,7 +22,7 @@
 ### 安装依赖
 
 ```bash
-pip install flask requests
+pip install flask requests "urllib3<2.0"
 ```
 
 ### 项目结构

@@ -27,18 +27,19 @@ pip install flask requests
 
 ### 项目结构
 
-```
+```bash
 CSDN-lottery/
 ├── static/              # 静态文件目录
 │   ├── css/             # CSS文件
 │   │   └── style.css    # 样式文件
 │   ├── images/          # 图片文件
 │   └── index.html       # 前端页面
-├── app.py               # Flask应用
+├── 获取文章评论内容.py    # 获取文章评论内容脚本（单独的）
 ├── run.py               # 运行脚本
 ├── README.md            # 项目说明
 └── LICENSE              # 许可证
 ```
+
 
 ## 使用方法
 

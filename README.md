@@ -34,7 +34,7 @@ CSDN-lottery/
 │   │   └── style.css    # 样式文件
 │   ├── images/          # 图片文件
 │   └── index.html       # 前端页面
-├── 获取文章评论内容.py    # 获取文章评论内容脚本（单独的）
+├── 获取文章评论内容.py  # 获取文章评论内容脚本（单独的）
 ├── run.py               # 运行脚本
 ├── README.md            # 项目说明
 └── LICENSE              # 许可证
